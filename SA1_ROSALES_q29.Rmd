@@ -1,0 +1,273 @@
+---
+title: "SA1 TIME SERIES Q29"
+author: "Frances Aneth Rosales"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+  html_document:
+    code_folding: hide
+    toc: true
+  word_document:
+    toc: true
+header-includes:
+  - \usepackage{booktabs}
+---
+
+```{r setup , include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(forecast)
+library(tseries)
+library(ggplot2)
+library(zoo)
+library(lubridate)
+library(flextable)
+library(readr)
+library(car)
+library(tidyr)
+library(dplyr)
+library(emmeans)
+```
+
+```{r 1st, include=FALSE  }
+library(readr)
+
+weightloss_data <- read_csv("C:/Users/asus/Documents/ALL FEU FILES/FEU FOLDER 7/APPLIED MULTIVARIATE/SA1/Weight Loss by Diet Type and Time.csv")
+
+
+```
+\newpage
+
+
+\section{READING THE DATA}
+<class style="font-size: 15px;">
+Import </class>
+```{r show1st  }
+
+print(head(weightloss_data))
+```
+
+
+
+\newpage
+\section{1. Check Assumptions       }
+
+\subsection{Normality: Shapiro-Wilk}
+
+```{r show2NDS, include=  FALSE}
+weightloss_long <- weightloss_data %>%
+  pivot_longer(
+    cols = c(`Baseline`, `After 1 month`, `After 2 months`),
+    names_to = "TimePoint",
+    values_to = "WeightLoss"
+  )
+
+
+constant_values <- weightloss_long %>%
+  group_by(`Diet Type`, TimePoint) %>%
+  summarize(IdenticalValues = n_distinct(WeightLoss) == 1, .groups = 'drop')
+
+print(constant_values)
+
+normality_assessment <- function(data, diet_type, time_point) {
+
+  diet_data <- data %>%
+    filter(`Diet Type` == diet_type & TimePoint == time_point)
+  
+  if (nrow(diet_data) < 3) {
+    return("Not enough data for normality assessment")
+  }
+  
+  shapiro_result <- shapiro.test(diet_data$WeightLoss)
+  
+  return(shapiro_result)
+}
+
+results <- list()
+
+for (diet in unique(weightloss_data$`Diet Type`)) {
+  for (time in c("After 1 month", "After 2 months")) {
+    results[[paste(diet, time)]] <- normality_assessment(weightloss_long, diet, time)
+  }
+}
+
+```
+```{r show2NDSshow  }
+results
+```
+
+\subsection{Homogeneity of Variance: Levene'sTest }
+
+
+```{r echo=FALSE, results='asis'}
+levene_test <- data.frame(
+  Timepoint = c("Baseline", "After 1 month", "After 2 months"),
+  F = c(NA, 1.266, 2.761),
+  df1 = c(1, 1, 1),
+  df2 = c(18, 18, 18),
+  p = c(NA, 0.275, 0.114)
+)
+
+knitr::kable(levene_test, caption = "Test for Equality of Variances (Levene's)", 
+             col.names = c("", "F", "df1", "df2", "p"), 
+             booktabs = TRUE)
+
+```
+
+\newpage
+
+\subsection{Sphericity: w/ Greenhouse-Geisser}
+
+
+
+```{r echo=FALSE, results='asis'}
+test_of_sphericity <- data.frame(
+  Factor = "RM Factor 1",
+  Mauchlys_W = 0.526,
+  Approx_Chi_Square = 10.909,
+  df = 2,
+  p_value = 0.004,
+  GG_epsilon = 0.679,
+  HF_epsilon = 0.715,
+  LB_epsilon = 0.500
+)
+
+knitr::kable(test_of_sphericity, caption = "Test of Sphericity", 
+             col.names = c("", "Mauchly's W", "Approx. X²", "df", "p-value", 
+                           "Greenhouse-Geisser ε", "Huynh-Feldt ε", "Lower Bound ε"),
+             booktabs = TRUE)
+
+```
+
+\subsection{Independence}
+
+```{r Normality, include=FALSE}
+library(dplyr)
+
+participant_counts <- weightloss_data %>%
+  group_by(`Diet Type`) %>%
+  summarise(UniqueParticipants = n_distinct(Participant))
+
+print(participant_counts)
+
+overlapping_participants <- weightloss_data %>%
+  group_by(Participant) %>%
+  summarise(DietTypes = n_distinct(`Diet Type`)) %>%
+  filter(DietTypes > 1)
+```
+
+```{r Normalityshow  }
+
+
+if (nrow(overlapping_participants) > 0) {
+  print("The following participants appear in multiple diet types:")
+  print(overlapping_participants)
+} else {
+  print("All participants are independent across diet types.")
+}
+
+
+```
+\subsubsection{Findings:} 
+
+While checking the assumptions before our ANOVA, the assumptions were examined. After one and two months, the weight loss data for all groups showed a \textbf{normal distribution} with \textbf{p-values > 0.05} in accordance with the Shapiro-Wilk test. On the other hand, the absence of participant overlap among diet groups verified the \textbf{independence of the observations}. Given that the \textbf{p-values were more than 0.05}, Levene's test demonstrated that the \textbf{variances were equal} at each time point. Lastly, adjustments such as \textbf{Huynh-Feldt} and \textbf{Greenhouse-Geisser} were taken into consideration because the \textbf{Mauchly's test of sphericity was violated} with a significant outcome.
+
+
+
+
+
+\newpage
+
+
+\section{2. Conduct the Two-Way Mixed Model ANOVA}
+\subsection{Main Effect}
+
+Including: Two-way mixed model ANOVA 
+
+
+\begin{itemize}
+    \item \textbf{Between-Subjects Factor:} Diet Type (Low-Carb vs. Low-Fat)
+    \item \textbf{Within-Subjects Factor:} Time (Baseline, 1 Month, 2 Months)
+    \item \textbf{Dependent Variable:} Weight Loss
+\end{itemize}
+
+ 
+Here, since our sphericity is violated this part of my code performs the ANOVA with Greenhouse-Geisser correction
+
+```{r Homogeneity, include=FALSE}
+
+library(afex)
+anova_results <- aov_ez(
+  id = "Participant", 
+  dv = "WeightLoss", 
+  data = weightloss_long, 
+  between = "Diet Type", 
+  within = "TimePoint",
+  anova_table = list(correction = "GG")  # Greenhouse-Geisser correction
+)
+
+
+```
+
+```{r Homogeneityshow  }
+
+print(anova_results)
+```
+\subsubsection{Findings:}
+\textbf{Diet Type:} According to Diet Type, the main effect of diet type on weight loss was significant. With \textbf{F-Stats = 174.71}, a large effect size \textbf{ges = .859}, and a \textbf{p-value < 0.001}. Therefore, this implies that the type of diet (\textit{Low-Carb vs. Low-Fat}) has an impact on weight loss.
+
+\textbf{Time:} Our time report shows that the effect of time on weight loss was highly significant with \textbf{F-Stats = 2889.94}, a big effect size \textbf{ges = .984}, and a \textbf{p-value < 0.001}. This result indicates that weight loss significantly changes over time at different time points (\textit{Baseline, 1 Month, 2 Months}). The very large effect size suggests that almost all variation in weight loss was explained by changes across time.
+
+
+
+\section{3. Interaction Effect}
+A substantial effect size (\textbf{ges = .827}), a p-value smaller than \textbf{.001}, and an F-statistic of \textbf{ 229.88} all demonstrated the significance of the interaction between diet type and time. This strong interaction suggests that the type of diet had an impact on how weight loss progressed over time. Compared to the Low-Fat group, the Low-Carb group experienced a more significant increase in weight loss over time. Although both groups gradually lost a substantial amount of weight, the Low-Carb diet resulted in greater overall weight loss at a faster rate by the end of the trial. This implies that the duration of adherence to the diet determines its effectiveness, with the Low-Carb diet exhibiting a more pronounced impact over time.
+
+\newpage
+\section{POST-HOC}
+
+\subsection{Post-Hoc: Diet Type}
+
+```{r boxplot12, include=FALSE}
+post_hoc_diet <- emmeans(anova_results, specs = pairwise ~ `Diet Type`)
+summary(post_hoc_diet)
+post_hoc_diet_bonf <- emmeans(anova_results, 
+                               specs = pairwise ~ `Diet Type`,
+                               adjust = "bonferroni")
+
+
+```
+
+```{r boxplot12show  }
+summary(post_hoc_diet_bonf)
+```
+\subsubsection{Findings:}
+With a \textbf{95\% confidence interval}, the post-hoc analysis reveals that the Low-Carb diet group lost significantly more weight than the Low-Fat group. The Low-Carb diet resulted in much higher weight reduction, with an estimated difference in weight loss between the two diets of \textbf{0.793} and a highly significant difference (\textbf{t = 13.218}, \textbf{p-value < .0001}). Even after applying the Bonferroni correction for multiple comparisons, these findings remain significant.
+
+
+\newpage
+\subsection{Post-Hoc: TimePoint}
+
+```{r boxplot122, include=FALSE}
+post_hoc_interaction <- emmeans(anova_results, specs = pairwise ~ `Diet Type` * TimePoint)
+```
+
+```{r boxplot122show  }
+summary(post_hoc_interaction)
+
+```
+\subsubsection{Findings:}
+
+According to the post-hoc interaction analysis, there was no baseline weight loss in either the Low-Carb or Low-Fat groups. By the first and second months, the Low-Carb group lost significantly more weight than the Low-Fat group at every time point. After two months, there was a substantial difference in the total amount of weight lost by the Low-Carb and Low-Fat groups.
+
+
+\newpage
+
+
+
+
+
+
+

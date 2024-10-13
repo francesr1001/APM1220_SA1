@@ -1,0 +1,129 @@
+---
+title: "SA1 TIME SERIES Q14"
+author: "Frances Aneth Rosales"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true        
+  html_document:
+    code_folding: hide
+    toc: true        
+---
+
+```{r setup , include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(forecast)
+library(tseries)
+library(tidyr)
+library(dplyr)
+library(afex)
+library(ggplot2)
+library(car)
+library(ggplot2)
+library(zoo)
+library(lubridate)
+library(flextable)
+library(readr)
+library(car)
+library(emmeans)
+
+```
+
+<class style="font-size: 15px;">
+Import </class>
+```{r 1st, include=FALSE , warning=FALSE}
+ratexplo_data <- read_csv("C:/Users/asus/Documents/ALL FEU FILES/FEU FOLDER 7/APPLIED MULTIVARIATE/SA1/RatExploration_csvFile.csv") 
+
+ratexplo_data <- ratexplo_data[, -4]
+
+ratexplo_data <- ratexplo_data %>%
+  filter(!is.na(ID) & !is.na(Stimuli) & !is.na(Time)) %>%
+  mutate(Time = as.numeric(Time),
+         Stimuli = as.factor(Stimuli))
+
+ratexplo_data$Stimuli <- as.factor(ratexplo_data$Stimuli)
+
+```
+
+\newpage
+\section{READING THE DATA}
+
+<class style="font-size: 15px;">
+Import </class>
+
+```{r show1st  }
+
+print(head(ratexplo_data))
+
+```
+
+
+
+
+\newpage
+\section{1. Summary of ANOVA: Effect of Oil Type on Mileage}
+```{r Normality, include=FALSE}
+anova_results <- aov(Time ~ Stimuli, data = ratexplo_data)
+
+anova_summary <- summary(anova_results)
+
+```
+
+```{r Normalityshow  }
+print(anova_summary)
+```
+\subsubsection{Findings:} 
+
+According to our ANOVA results, we saw that the time spent in three different treatments is \textbf{statistically significant}. As such, with an \textbf{F-value of 62.09} and a highly significant \textbf{p-value of 6.53e-12}, this shows that there's a probability that one of the different treatments such as \textbf{shapes, patterns, or pictures} implicates that rats exhibit various levels of exploratory behavior.
+
+```{r Independence1show  }
+
+if (anova_summary[[1]]["Pr(>F)"][1, 1] < 0.05) {
+  cat("There is a significant difference in time spent among the treatment conditions.\n")
+} else {
+  cat("There is no significant difference in time spent among the treatment conditions.\n")
+}
+```
+\newpage
+
+\section{2. POST-HOC}
+```{r Homogeneityshow  }
+if (anova_summary[[1]]["Pr(>F)"][1, 1] < 0.05) {
+  posthoc_results <- TukeyHSD(anova_results)
+  print(posthoc_results)
+}
+```
+
+\subsubsection{Findings:}
+According to our \textbf{Tukey post-hoc analysis}, there are also \textbf{significant differences} in the time spent on three different treatments. The results we obtained show an \textbf{average increase of 1.07 seconds} in the \textit{Picture} condition compared to the \textit{Pattern} condition, with a \textbf{p-value of 0.00034}. On the other hand, \textit{Shape} decreased by \textbf{1.64 seconds} compared to \textit{Pattern} with a \textbf{p-value of 0.0000004}. Lastly, there is a decrease of \textbf{2.70 seconds} in \textit{Shape} compared to \textit{Picture}, with a \textbf{p-value of 0.0000000}. This implies that the type of visual stimulus indeed \textbf{significantly influences the exploratory behavior} of the rats, with \textit{Picture} being the \textbf{most effective} and \textit{Shape} appearing to be the \textbf{least effective}.
+
+
+
+\newpage
+
+
+\section{3. Boxplot Time vs Treatment Condition }
+
+```{r 2waysummaryshow  }
+
+ggplot(ratexplo_data, aes(x = Stimuli, y = Time)) +
+  geom_boxplot() +
+  labs(title = "Exploration Time by Treatment Condition",
+       x = "Treatment Condition",
+       y = "Seconds Spent Exploring") +
+  theme_minimal()
+
+
+```
+\subsubsection{Findings:}
+Our boxplot shows that the \textbf{"Picture"} treatment is associated with the \textbf{most time spent} compared to the other two treatments, with a median of approximately \textbf{4 seconds}. However, \textbf{"Shape"} shows the \textbf{lowest exploration} among the three treatments, with a median of less than \textbf{2 seconds}. \textbf{"Pattern"}, on the other hand, falls in between the two treatment conditions.   
+
+
+\newpage
+
+\section{ANALYSIS AND CONCLUSION}
+
+In this scenario, we are required to analyze the data using one of the \textbf{ANOVA types} to compare the number of seconds the rats spent exploring the experimental chamber with the images. Additionally, we need to determine if there is a \textbf{significant difference} in time spent between the three treatment conditions: \textit{shapes}, \textit{patterns}, and \textit{pictures}.
+
+Among the results, our analysis shows that the three treatments of visual stimulus \textbf{indeed} contributed a significant impact on their exploration behavior. According to our findings, \textbf{Pictures} show the \textbf{most exploratory behavior} in rats, followed by \textit{patterns} and lastly, \textit{shapes}. This points to the possibility that various appearances, some more engaging than others, can affect rats' exploratory behavior.

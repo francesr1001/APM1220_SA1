@@ -1,0 +1,185 @@
+---
+title: "SA1 TIME SERIES Q6"
+author: "Frances Aneth Rosales"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true        
+  html_document:
+    code_folding: hide
+    toc: true        
+---
+
+```{r setup , include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(forecast)
+library(tseries)
+library(tidyr)
+library(dplyr)
+library(afex)
+library(ggplot2)
+library(car)
+library(ggplot2)
+library(zoo)
+library(lubridate)
+library(flextable)
+library(readr)
+library(car)
+library(emmeans)
+
+```
+
+<class style="font-size: 15px;">
+Import </class>
+```{r 1st, include=FALSE  }
+library(tidyr)
+library(dplyr)
+
+dataframe <- data.frame(
+  Cars = rep(1:5, each = 4),
+  Oil = rep(1:4, times = 5),
+  Mileage = c(36, 38, 30, 29,
+              34, 38, 30, 29,
+              34, 28, 38, 32,
+              38, 34, 20, 44,
+              26, 28, 34, 50)
+)
+
+```
+
+\newpage
+\section{READING THE DATA}
+
+<class style="font-size: 15px;">
+Import </class>
+
+```{r show1st  }
+
+print(dataframe)
+
+```
+
+
+
+
+\newpage
+\section{1. Summary of ANOVA: Effect of Oil Type on Mileage}
+```{r Normality, include=FALSE}
+dataframe$Oil <- factor(dataframe$Oil)
+
+anova_results <- aov(Mileage ~ Cars + Error(Oil/Cars), data = dataframe)
+
+```
+
+```{r Normalityshow  }
+
+summary(anova_results)
+```
+\subsubsection{Findings:} 
+The ANOVA results, with an \textbf{F value of 0.042} and a \textbf{p-value of 0.851} for the Cars factor, show that the type of oil utilized had no statistically significant impact on mileage. This implies that after adjusting each car's variances, the mileage differences between different oil types are \textbf{not statistically significant}. The residuals also exhibit significant change, but they provide no solid evidence that the type of oil used and mileage are \textbf{related}.
+
+\newpage
+
+\section{2. Summary of ANOVA: Cars as a Random Factor}
+```{r Homogeneity, include=FALSE}
+
+
+anova_results <- aov(Mileage ~ factor(Oil) + Error(Cars/(factor(Oil))), data = dataframe)
+
+anova_summary <- summary(anova_results)
+
+```
+
+```{r Homogeneityshow  }
+print(anova_summary)
+```
+
+\subsubsection{Findings:}
+The ANOVA results indicate that \(5.625\) is the residual sum of squares, suggesting that there is little variance in mileage that can be attributed to changes across individual cars. With an \(F\) value of \(2.941\) and a \(p\)-value of \(0.0762\), this shows that although there might be variations in mileage depending on the type of oil used, these variations are not statistically significant at the traditional alpha level of \(0.05\). Overall, the analysis indicates that there is a possibility that the \textbf{type of oil could affect mileage}.
+
+```{r Independence1, include=FALSE}
+sphericity_test <- anova_results[[1]]  
+
+```
+
+
+```{r Independence1show  }
+
+if ("Sphericity" %in% rownames(sphericity_test)) {
+  mauchly_p_value <- sphericity_test["Sphericity", "Pr(>F)"]
+  
+  if (mauchly_p_value < 0.05) {
+    cat("Mauchly's test p-value:", mauchly_p_value, "- Sphericity assumption is NOT met.\n")
+  } else {
+    cat("Mauchly's test p-value:", mauchly_p_value, "- Sphericity assumption is met.\n")
+  }
+} else {
+  cat("Mauchly's test could not be performed.\n")
+}
+```
+
+\newpage
+
+
+\section{3. Q-Q Plot }
+
+```{r 2waysummaryshow  }
+
+ggplot(dataframe, aes(sample = Mileage)) +
+  stat_qq() +
+  stat_qq_line() +
+  labs(title = "Q-Q Plot of Mileage", x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  theme_minimal()
+
+
+```
+\subsubsection{Findings:}
+
+A normal distribution is indicated by the Q-Q plot of mileage, which shows that the data follows a \textbf{45-degree reference line}. However, there are also variants, particularly in the \textbf{tails}, which suggest outliers or unusual patterns in both \textbf{high and low mileage values}. Thus, implicating a \textbf{deviating from normality}.
+
+
+
+\newpage
+\section{4. Boxplot: Mileage vs Oil }
+
+```{r maineffetc  }
+
+ggplot(dataframe, aes(x = factor(Oil), y = Mileage)) +
+  geom_boxplot() +
+  labs(title = "Mileage by Engine Oil Type", x = "Engine Oil", y = "Mileage") +
+  theme_minimal()
+
+```
+\subsubsection{Findings:}
+
+As shown in our \textbf{boxplot}, Oil type 1 has a \textbf{fairly limited range} with one lower outlier, whereas oil type 4 has the \textbf{largest variance} in distance and the \textbf{broadest range} within a single quarter. When compared to the other oils, oil type 4 generally has a \textbf{greater median mileage}, while oil type 3 has the \textbf{lowest}.
+
+\newpage
+
+\section{5. POST-HOC}
+
+```{r maineffetcSHOW  }
+posthoc_results <- emmeans(anova_results, ~ Oil)
+tukey_results <- pairs(posthoc_results, adjust = "tukey")
+print(tukey_results)
+
+```
+\subsubsection{Findings:}
+There were no \textbf{significant differences} in mileage between the various oil types according to the \textbf{Tukey post-hoc analysis}, with the biggest difference being \textbf{18.7} between Oil 1 and Oil 4. The \textbf{p-value} of \textbf{0.1257}, however, was not statistically significant.
+
+
+\newpage
+
+\section{ANALYSIS AND CONCLUSION}
+The results of the ANOVA analysis indicate that the type of oil used does not have a statistically significant effect on mileage, as shown by the p-value of 0.851. The boxplot demonstrates that oil type 4 had the highest median mileage, but the variation between oil types was not significant. The Q-Q plot suggests that while the data follows a normal distribution, there are outliers in both the high and low mileage values. Furthermore, the Tukey post-hoc test reveals no significant differences between the oil types, with the largest difference being 18.7 between Oil 1 and Oil 4, but this was not statistically significant (p-value = 0.1257). Overall, the analysis shows no strong evidence that the type of oil used affects the mileage significantly.
+
+
+
+
+
+
+
+
+
+
