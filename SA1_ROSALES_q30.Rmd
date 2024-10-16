@@ -1,0 +1,251 @@
+---
+title: "SA1 TIME SERIES Q30"
+author: "Frances Aneth Rosales"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+  html_document:
+    code_folding: hide
+    toc: true
+  word_document:
+    toc: true
+header-includes:
+  - \usepackage{booktabs}
+---
+
+```{r setup , include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(forecast)
+library(tseries)
+library(ggplot2)
+library(zoo)
+library(lubridate)
+library(flextable)
+library(readr)
+library(car)
+library(tidyr)
+library(dplyr)
+library(emmeans)
+```
+
+```{r 1st, include=FALSE  }
+library(readr)
+
+server_data <- read.csv("C:/Users/asus/Documents/ALL FEU FILES/FEU FOLDER 7/APPLIED MULTIVARIATE/SA1/server_response_time_replicates.csv")
+
+
+```
+\newpage
+
+
+\section{READING THE DATA}
+<class style="font-size: 15px;">
+Import </class>
+```{r show1st  }
+print(head(server_data))
+
+```
+
+
+
+\newpage
+\section{1. Check Assumptions       }
+
+\subsection{Normality: Shapiro-Wilk}
+```{r normalityval}
+unique_servers <- unique(server_data$Server)
+
+print(unique_servers)
+```
+With Unique Value in Server namely 1-20, we will get its normality to figure if server response times should follow a normal distribution within each group.
+```{r show2NDS, include=  FALSE}
+library(dplyr)
+library(knitr)
+
+normality_results <- server_data %>%
+  group_by(Server) %>%
+  summarise(p_value = shapiro.test(Response.Time)$p.value)
+
+normality_results_df <- as.data.frame(normality_results)
+
+```
+
+```{r show2NDSshow  }
+kable(normality_results_df)
+```
+
+\subsection{Sphericity: w/correction of Greenhouse-Geisser}
+
+
+```{r show2NDSshowspe, include=FALSE}
+library(ez)
+
+sphericity_test <- ezANOVA(
+  data = server_data,
+  dv = .(Response.Time),
+  wid = .(Server),
+  within = .(Time),
+  type = 3,
+  detailed = TRUE
+)
+
+```
+
+
+
+```{r show2NDSspe}
+print(sphericity_test)
+
+```
+With our sphericity_test concluded <.05, we need to perform Greenhouse-Geisser Results
+
+```{r show2NDSspcode, include=FALSE}
+sphericity_corrections <- sphericity_test$`Sphericity Corrections`
+
+
+greenhouse_geisser_p_value <- sphericity_corrections[sphericity_corrections$Effect == "Time", "p[GG]"]
+
+
+```
+```{r show2NDSspcodex}
+
+print(sphericity_corrections)
+cat("Greenhouse-Geisser (GG) corrected p-value for Time:", greenhouse_geisser_p_value, "\n")
+
+
+```
+
+
+\newpage
+
+\subsection{}
+
+
+
+```{r leveres,}
+server_data$Server <- as.factor(server_data$Server)
+levene_test_result <- leveneTest(Response.Time ~ Server, data = server_data)
+print(levene_test_result)
+
+```
+
+\subsection{Independence}
+
+```{r Normality, include=FALSE}
+library(dplyr)
+
+# Identify servers that have the same response time across different time points
+overlapping_servers <- server_data %>%
+  group_by(Server, Response.Time) %>%
+  filter(n_distinct(Time) > 1) %>%
+  summarise(Times = paste(unique(Time), collapse = ", "), .groups = "drop")
+
+```
+
+```{r Normalityshow  }
+if (nrow(overlapping_servers) > 0) {
+  print("The following servers have overlapping response times across different time points:")
+  print(overlapping_servers)
+} else {
+  print("All servers are independent across time points.")
+}
+
+
+```
+\subsubsection{Findings for Check Assumptions} 
+Since there is a \textbf{statistically significant difference} between the means across the time groups and the \textbf{Greenhouse-Geisser corrected p-value}, we can move further with ANOVA. Furthermore, the \textbf{Greenhouse-Geisser correction} is justified since the results of \textbf{Mauchly's Test for Sphericity} indicate that the assumption of sphericity is violated. The requirement for corrections for valid ANOVA findings is further supported by the \textbf{substantial results of Levene's Test}, which also reveal that the assumption of homogeneity of variances is broken.
+
+
+
+
+\newpage
+
+
+\section{2. Conduct the Two-Way Mixed Model ANOVA}
+\subsection{Main Effect}
+
+Including: Two-way mixed model ANOVA 
+
+
+\begin{itemize}
+    \item \textbf{Between-Subjects Factor 1: Server Type}
+    \begin{itemize}
+        \item Linux vs. Windows
+    \end{itemize}
+    \item \textbf{Between-Subjects Factor 2: Security Protocol}
+    \begin{itemize}
+        \item TLS (Transport Layer Security) vs. SSL (Secure Sockets Layer)
+    \end{itemize}
+    \item \textbf{Within-Subjects Factor: Time}
+    \begin{itemize}
+        \item Baseline (Time 1), After 1 Month (Time 2), After 2 Months (Time 3)
+    \end{itemize}
+    \item \textbf{Dependent Variable: Server Response Time} (measured in milliseconds)
+\end{itemize}
+
+ 
+Here, since our sphericity is violated this part of my code performs the ANOVA with Greenhouse-Geisser correction
+
+```{r Homogeneity, include=FALSE}
+
+library(dplyr)
+library(knitr)
+
+server_data$Server.Type <- as.factor(server_data$Server.Type)
+server_data$Security.Protocol <- as.factor(server_data$Security.Protocol)
+server_data$Time <- as.factor(server_data$Time)
+
+anova_results <- aov(Response.Time ~ Server.Type * Security.Protocol * Time, data = server_data)
+
+```
+
+```{r Homogeneityshow  }
+
+summary(anova_results)
+```
+\subsubsection{Findings:}
+The results indicate significant main effects for Server Type, Security Protocol, and Time on server response times, suggesting that each of these influences the performance of the servers. The significant interaction effect between Server Type and Security Protocol implies that the impact of the server type on response times varies depending on the security protocol used.
+
+\newpage
+
+\section{3. Interaction Effect}
+
+\begin{itemize}
+    \item \textbf{Server Type, Security Protocol, and Time Main Effects}: The study shows that each of the three variables has a significant main effect, suggesting that \textbf{Server Type}, \textbf{Security Protocol}, and \textbf{Time} all have an independent impact on server response times.
+    \item \textbf{Interaction Effect between Server Type and Security Protocol}: The interaction effect between \textbf{Server Type} and \textbf{Security Protocol} is significant, with the security protocol determining the impact on response times. For example, the performance of \textit{Linux servers} may differ significantly from \textit{Windows servers} based on the usage of \textit{TLS} or \textit{SSL}.
+    \item \textbf{Interaction Effect between Server Type and Time}: This relationship shows that the impact of \textbf{Server Type} on response times changes over the various \textbf{Time} periods evaluated. This implies that server performance characteristics may change when the server is used over time, resulting in varying outcomes at each step.
+    \item \textbf{Interaction Effect between Security Protocol and Time}: \textbf{Security Protocol} success rates may vary over time due to interaction effects, affecting performance relative to server response times. This necessitates constant monitoring for optimal server management.
+\end{itemize}
+
+
+\newpage
+\section{POST-HOC}
+
+\subsection{Post-Hoc}
+
+```{r boxplot12, include=FALSE}
+library(emmeans)
+
+post_hoc_results <- emmeans(anova_results, ~ Server.Type * Security.Protocol * Time)
+
+pairwise_results <- pairs(post_hoc_results)
+
+
+```
+
+```{r boxplot12show  }
+print(pairwise_results)
+```
+\subsubsection{Findings:}
+\begin{itemize}
+    \item \textbf{Tukey's HSD analysis} reveals significant variations in response times across servers and security protocols.
+    \item A one-month \textbf{Linux SSL setup} responds faster than \textbf{Windows SSL} and \textbf{Linux TLS} setups, with \textbf{p-values smaller than 0.0001}.
+    \item However, some comparisons, such as \textbf{Linux SSL at one month} versus \textbf{Linux SSL at two months}, do not show statistically significant differences, suggesting that not all transitions across different configurations are statistically significant.
+\end{itemize}
+
+
+\section{RESULTS}
+The results of the analysis indicate significant main effects for Server Type, Security Protocol, and Time on server response times, suggesting that each factor independently influences server performance. The interaction effect between Server Type and Security Protocol was significant, meaning the impact of server type on response times varied based on the security protocol used. Additionally, the interaction between Server Type and Time revealed that server performance changed over time, depending on the type of server. A significant interaction between Security Protocol and Time was also found, showing that security protocol effectiveness fluctuated across time periods. Post-hoc analyses further confirmed these significant differences across various combinations of server types, protocols, and time points.
